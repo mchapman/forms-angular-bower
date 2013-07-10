@@ -1,19 +1,11 @@
-/*! forms-angular 2013-07-04 */
+/*! forms-angular 2013-07-10 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
     'ui.select2'
     , 'ui.date'
 
-    // seems a bit silly to do this as all of ui-bootstrap is being loaded, but one day I may want to change that, so this serves as a list
-    , 'ui.bootstrap.dropdownToggle'
-
-    , 'ui.bootstrap.tabs'
-    , 'template/tabs/tab.html'
-    , 'template/tabs/tabset.html'
-
-//    , 'ui.bootstrap.datepicker'
-//    , 'template/datepicker/datepicker.html'
+    , 'fng.ui.bootstrap'
 ]);
 
 // Ideally would want a config call in here which adds the routes, below, but couldn't get it to work
@@ -914,7 +906,11 @@ formsAngular.controller('NavCtrl',['$scope', '$location', '$filter', '$locationP
             })
         }
         catch(error) {
-            // No such controller
+            if (error.message === "Argument '" + controllerName + "' is not a function, got undefined") {
+                // No such controller - don't care
+            } else {
+                console.log("Unable to instantiate "+controllerName + " - " + error.message);
+            }
         }
     }
 
@@ -942,7 +938,7 @@ formsAngular.controller('NavCtrl',['$scope', '$location', '$filter', '$locationP
 
     $scope.doClick = function(index) {
         // Performance optimization: http://jsperf.com/apply-vs-call-vs-invoke
-        var args = $scope.items[index].args,
+        var args = $scope.items[index].args || [],
             fn = $scope.items[index].fn;
         switch (args.length) {
             case  0:
@@ -983,6 +979,151 @@ formsAngular.controller('SearchCtrl', ['$scope', '$http', function ($scope, $htt
         $scope.searchTarget = '';
     });
 
+}]);
+
+angular.module("fng.ui.bootstrap", ["fng.ui.bootstrap.tpls", "fng.ui.bootstrap.dropdownToggle","fng.ui.bootstrap.tabs"]);
+angular.module("fng.ui.bootstrap.tpls", ["template/tabs/pane.html","template/tabs/tabs.html"]);
+/*
+ * dropdownToggle - Provides dropdown menu functionality in place of bootstrap js
+ * @restrict class or attribute
+ * @example:
+ <li class="dropdown">
+ <a class="dropdown-toggle">My Dropdown Menu</a>
+ <ul class="dropdown-menu">
+ <li ng-repeat="choice in dropChoices">
+ <a ng-href="{{choice.href}}">{{choice.text}}</a>
+ </li>
+ </ul>
+ </li>
+ */
+
+angular.module('fng.ui.bootstrap.dropdownToggle', []).directive('dropdownToggle',
+    ['$document', '$location', '$window', function ($document, $location, $window) {
+        var openElement = null,
+            closeMenu   = angular.noop;
+        return {
+            restrict: 'CA',
+            link: function(scope, element, attrs) {
+                scope.$watch('$location.path', function() { closeMenu(); });
+                element.parent().bind('click', function() { closeMenu(); });
+                element.bind('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    var elementWasOpen = (element === openElement);
+                    if (!!openElement) {
+                        closeMenu(); }
+                    if (!elementWasOpen){
+                        element.parent().addClass('open');
+                        openElement = element;
+                        closeMenu = function (event) {
+                            if (event) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                            }
+                            $document.unbind('click', closeMenu);
+                            element.parent().removeClass('open');
+                            closeMenu   = angular.noop;
+                            openElement = null;
+                        };
+                        $document.bind('click', closeMenu);
+                    }
+                });
+            }
+        };
+    }]);
+angular.module('fng.ui.bootstrap.tabs', [])
+    .controller('TabsController', ['$scope', '$element', function($scope, $element) {
+        var panes = $scope.panes = [];
+
+        this.select = $scope.select = function selectPane(pane) {
+            angular.forEach(panes, function(pane) {
+                pane.selected = false;
+            });
+            pane.selected = true;
+        };
+
+        this.addPane = function addPane(pane) {
+            if (!panes.length) {
+                $scope.select(pane);
+            }
+            panes.push(pane);
+        };
+
+        this.removePane = function removePane(pane) {
+            var index = panes.indexOf(pane);
+            panes.splice(index, 1);
+            //Select a new pane if removed pane was selected
+            if (pane.selected && panes.length > 0) {
+                $scope.select(panes[index < panes.length ? index : index-1]);
+            }
+        };
+    }])
+    .directive('tabs', function() {
+        return {
+            restrict: 'EA',
+            transclude: true,
+            scope: {},
+            controller: 'TabsController',
+            templateUrl: 'template/tabs/tabs.html',
+            replace: true
+        };
+    })
+    .directive('pane', ['$parse', function($parse) {
+        return {
+            require: '^tabs',
+            restrict: 'EA',
+            transclude: true,
+            scope:{
+                heading:'@'
+            },
+            link: function(scope, element, attrs, tabsCtrl) {
+                var getSelected, setSelected;
+                scope.selected = false;
+                if (attrs.active) {
+                    getSelected = $parse(attrs.active);
+                    setSelected = getSelected.assign;
+                    scope.$watch(
+                        function watchSelected() {return getSelected(scope.$parent);},
+                        function updateSelected(value) {scope.selected = value;}
+                    );
+                    scope.selected = getSelected ? getSelected(scope.$parent) : false;
+                }
+                scope.$watch('selected', function(selected) {
+                    if(selected) {
+                        tabsCtrl.select(scope);
+                    }
+                    if(setSelected) {
+                        setSelected(scope.$parent, selected);
+                    }
+                });
+
+                tabsCtrl.addPane(scope);
+                scope.$on('$destroy', function() {
+                    tabsCtrl.removePane(scope);
+                });
+            },
+            templateUrl: 'template/tabs/pane.html',
+            replace: true
+        };
+    }]);
+
+angular.module("template/tabs/pane.html", []).run(["$templateCache", function($templateCache){
+    $templateCache.put("template/tabs/pane.html",
+        "<div class=\"tab-pane\" ng-class=\"{active: selected}\" ng-show=\"selected\" ng-transclude></div>" +
+            "");
+}]);
+
+angular.module("template/tabs/tabs.html", []).run(["$templateCache", function($templateCache){
+    $templateCache.put("template/tabs/tabs.html",
+        "<div class=\"tabbable\">" +
+            "  <ul class=\"nav nav-tabs\">" +
+            "    <li ng-repeat=\"pane in panes\" ng-class=\"{active:pane.selected}\">" +
+            "      <a ng-click=\"select(pane)\">{{pane.heading}}</a>" +
+            "    </li>" +
+            "  </ul>" +
+            "  <div class=\"tab-content\" ng-transclude></div>" +
+            "</div>" +
+            "");
 }]);
 
 formsAngular
@@ -1034,19 +1175,23 @@ formsAngular
                             }
                             var value
                                 , requiredStr = (isRequired || fieldInfo.required) ? ' required' : ''
-                                , readonlyStr = fieldInfo.readonly ? ' readonly' : '';
+                                , readonlyStr = fieldInfo.readonly ? ' readonly' : ''
+                                , common;
 
+                            var common = focusStr + 'ng-model="' + modelString + '"' + (idString ? ' id="' + idString + '" name="' + idString + '" ' : ' ') + (fieldInfo.placeHolder ? ('placeholder="'+fieldInfo.placeHolder+'" ') : "");
                             if (fieldInfo.type === 'select') {
-                                if (fieldInfo.placeHolder) {placeHolder = 'data-placeholder="' + fieldInfo.placeHolder + '" '}
-                                if (fieldInfo.select2 && fieldInfo.select2.fngAjax) {
-                                    value = '<div class="input-append">';
-                                    value +=   '<input ui-select2="' + fieldInfo.select2.fngAjax +'" ' + focusStr + placeHolder + 'ng-model="' + modelString + '" id="' + idString + '" name="' + idString + '" class="fng-select2">';
-                                    value +=   '<button class="btn" type="button" data-select2-open="' + idString + '" ng-click="openSelect2($event)"><i class="icon-search"></i></button>';
-                                    value += '</div>';
-                                } else if (fieldInfo.select2) {
-                                    value = '<input ui-select2="'+ fieldInfo.select2.s2query +'" ' + focusStr + placeHolder + 'ng-model="' + modelString + '" id="' + idString + '" name="' + idString + '" class="fng-select2">';
+                                if (fieldInfo.select2) {
+                                    common += 'class="fng-select2' + (fieldInfo.size ? 'input-' + fieldInfo.size : '') + '"';
+                                    if ( fieldInfo.select2.fngAjax) {
+                                        value  = '<div class="input-append">';
+                                        value +=   '<input ui-select2="' + fieldInfo.select2.fngAjax +'" ' + common + '>';
+                                        value +=   '<button class="btn" type="button" data-select2-open="' + idString + '" ng-click="openSelect2($event)"><i class="icon-search"></i></button>';
+                                        value += '</div>';
+                                    } else if (fieldInfo.select2) {
+                                        value = '<input ui-select2="'+ fieldInfo.select2.s2query +'" ' + common + '>';
+                                    }
                                 } else {
-                                    value = '<select ' + focusStr + 'ng-model="' + modelString + '" id="' + idString + '" name="' + idString + '">';
+                                    value = '<select ' + common + (fieldInfo.size ? 'class="input-' + fieldInfo.size + '" ' : '')+ '>';
                                     if (!isRequired) { value += '<option></option>';}
                                     value += '<option ng-repeat="option in ' + fieldInfo.options + '">{{option}}</option>';
                                     value += '</select>';
@@ -1054,7 +1199,7 @@ formsAngular
                             } else if (fieldInfo.type === 'link') {
                                 value = '<a ng-href="/#/' + fieldInfo.ref + '/{{ ' + modelString  + '}}/edit">' + fieldInfo.linkText + '</a>';
                             } else {
-                                var common = focusStr + (fieldInfo.add ? fieldInfo.add : '') + (fieldInfo.placeHolder ? ('placeholder="'+fieldInfo.placeHolder+'" ') : "") + 'ng-model="' + modelString + '"' + (idString ? ' id="' + idString + '" name="' + idString + '"' : '') + requiredStr + readonlyStr + ' ';
+                                common += (fieldInfo.size ? 'class="input-' + fieldInfo.size + '" ' : '') + (fieldInfo.add ? fieldInfo.add : '') + 'ng-model="' + modelString + '"' + (idString ? ' id="' + idString + '" name="' + idString + '"' : '') + requiredStr + readonlyStr + ' ';
                                 if (fieldInfo.type == 'textarea') {
                                     value = '<textarea ' + common + (fieldInfo.rows ? 'rows = "' + fieldInfo.rows + '" ' : '') + ' />';
                                 } else {
