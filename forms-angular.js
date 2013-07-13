@@ -1,4 +1,4 @@
-/*! forms-angular 2013-07-10 */
+/*! forms-angular 2013-07-12 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
@@ -850,14 +850,18 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
 
     var updateRecordWithLookupValues = function (schemaElement) {
         // Update the master and the record with the lookup values
-        if ((schemaElement.select2 && (angular.equals(master[schemaElement.name], $scope.record[schemaElement.name].text))) ||
-                    (angular.equals(master[schemaElement.name], $scope.record[schemaElement.name]))) {
+        if (angular.equals(master[schemaElement.name], $scope.record[schemaElement.name]) ||
+            (schemaElement.select2 && angular.equals(master[schemaElement.name], $scope.record[schemaElement.name].text))) {
             updateObject(schemaElement.name, master, function (value) {
                 return( convertForeignKeys(schemaElement, value, $scope[suffixCleanId(schemaElement, 'Options')], $scope[suffixCleanId(schemaElement, '_ids')]));
             });
-            $scope.record = angular.copy(master);
-        } else {
-            throw new Error("Cannot convert lookup values in changed record")
+            // TODO This needs a rethink - it is a quick workaround.  See https://trello.com/c/q3B7Usll
+            if (master[schemaElement.name]) {
+                $scope.record[schemaElement.name] = master[schemaElement.name];
+            }
+            // TODO Reintroduce after conversion to Angular 1.1+ and introduction of ng-if
+//        } else {
+//            throw new Error("Record has been changed from "+master[schemaElement.name]+" to "+ $scope.record[schemaElement.name] +" in lookup "+schemaElement.name+".  Cannot convert.")
         }
     };
 
@@ -939,18 +943,24 @@ formsAngular.controller('NavCtrl',['$scope', '$location', '$filter', '$locationP
     $scope.doClick = function(index) {
         // Performance optimization: http://jsperf.com/apply-vs-call-vs-invoke
         var args = $scope.items[index].args || [],
-            fn = $scope.items[index].fn;
+            fn = $scope.items[index].fn,
+            result;
         switch (args.length) {
             case  0:
-                return fn();
+                result = fn();
+                break;
             case  1:
-                return fn(args[0]);
+                result =  fn(args[0]);
+                break;
             case  2:
-                return fn(args[0], args[1]);
+                result =  fn(args[0], args[1]);
+                break;
             case  3:
-                return fn(args[0], args[1], args[2]);
+                result =  fn(args[0], args[1], args[2]);
+                break;
             case  4:
-                return fn(args[0], args[1], args[2], args[3]);
+                result =  fn(args[0], args[1], args[2], args[3]);
+                break;
         }
     }
 }]);
@@ -1148,7 +1158,7 @@ formsAngular
     }]);
 
 formsAngular
-    .directive('formInput', ['$compile', function ($compile) {
+    .directive('formInput', ['$compile', '$rootScope', function ($compile, $rootScope) {
         return {
             restrict: 'E',
             replace: true,
@@ -1181,7 +1191,7 @@ formsAngular
                             var common = focusStr + 'ng-model="' + modelString + '"' + (idString ? ' id="' + idString + '" name="' + idString + '" ' : ' ') + (fieldInfo.placeHolder ? ('placeholder="'+fieldInfo.placeHolder+'" ') : "");
                             if (fieldInfo.type === 'select') {
                                 if (fieldInfo.select2) {
-                                    common += 'class="fng-select2' + (fieldInfo.size ? 'input-' + fieldInfo.size : '') + '"';
+                                    common += 'class="fng-select2' + (fieldInfo.size ? ' input-' + fieldInfo.size : '') + '"';
                                     if ( fieldInfo.select2.fngAjax) {
                                         value  = '<div class="input-append">';
                                         value +=   '<input ui-select2="' + fieldInfo.select2.fngAjax +'" ' + common + '>';
@@ -1317,6 +1327,8 @@ formsAngular
                             // If this is not a test force the data dependent updates to the DOM
                             scope.updateDataDependentDisplay(scope.record, null, true);
                         }
+                        // Todo - find a better way of communicating with controllers
+                        $rootScope.$broadcast('formInputDone',info)
                     });
                 };
             }
