@@ -1,8 +1,10 @@
-/*! forms-angular 2013-08-02 */
+/*! forms-angular 2013-08-21 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
-    'ui.select2'
+	  'ngRoute'
+    , 'ngSanitize'
+    , 'ui.select2'
     , 'ui.date'
     , 'fng.ui.bootstrap'
     , 'ui.bootstrap'
@@ -28,6 +30,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
     var sharedStuff = $data;
     $scope.record = sharedStuff.record;
     $scope.disableFunctions = sharedStuff.disableFunctions;
+    $scope.dataEventFunctions = sharedStuff.dataEventFunctions;
     $scope.formSchema = [];
     $scope.panes = [];
     $scope.listSchema = [];
@@ -420,6 +423,21 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
         }
     };
 
+    $scope.readRecord = function() {
+        $http.get('api/' + $scope.modelName + '/' + $scope.id).success(function (data) {
+            if (data.success === false) {
+                $location.path("/404");
+            }
+            if (typeof $scope.dataEventFunctions.onAfterRead === "function") {
+                $scope.dataEventFunctions.onAfterRead(data);
+            }
+            master = convertToAngularModel($scope.formSchema, data, 0);
+            $scope.cancel();
+        }).error(function () {
+            $location.path("/404");
+        });
+    };
+
     $http.get('api/schema/' + $scope.modelName + ($scope.formName ? '/' + $scope.formName : ''),{cache:true}).success(function (data) {
 
         handleSchema('Main ' + $scope.modelName, data, $scope.formSchema, $scope.listSchema, '', true);
@@ -445,15 +463,18 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
             }, true);
 
             if ($scope.id) {
-                $http.get('api/' + $scope.modelName + '/' + $scope.id).success(function (data) {
-                    if (data.success === false) {
-                        $location.path("/404");
-                    }
-                    master = convertToAngularModel($scope.formSchema, data, 0);
-                    $scope.cancel();
-                }).error(function () {
-                        $location.path("/404");
+                // Going to read a record
+                if (typeof $scope.dataEventFunctions.onBeforeRead === "function") {
+                    $scope.dataEventFunctions.onBeforeRead($scope.id, function(err) {
+                        if (err) {
+                            showError(err);
+                        } else {
+                            $scope.readRecord();
+                        }
                     });
+                } else {
+                    $scope.readRecord();
+                }
             } else {
                 master = {};
                 $scope.cancel();
@@ -467,18 +488,28 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
         // would like to do
         //        $scope.record = angular.copy(master);
         // but the data may be shared
-        var prop;
 
-        for (prop in $scope.record) {
-            if ($scope.record.hasOwnProperty(prop)) {
-                delete $scope.record[prop];
+        function copyObject(to, from) {
+            var prop;
+
+            for (prop in to) {
+                if (to.hasOwnProperty(prop)) {
+                    delete to[prop];
+                }
+            }
+            for (prop in from) {
+                if (from.hasOwnProperty(prop)) {
+                    if (_.isObject(from[prop]) && !_.isArray(from[prop])) {
+                        to[prop] = {};
+                        copyObject(to[prop],from[prop]);
+                    } else {
+                        to[prop] = from[prop];
+                    }
+                }
             }
         }
-        for (prop in master) {
-            if (master.hasOwnProperty(prop)) {
-                $scope.record[prop] = master[prop];
-            }
-        }
+
+        copyObject($scope.record, master);
         $scope.dismissError();
 
 // TODO: Sort all this pristine stuff
@@ -543,43 +574,93 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
         delete $scope.errorMessage;
     };
 
+    $scope.createNew = function(dataToSave, options) {
+        $http.post('api/' + $scope.modelName, dataToSave).success(function (data) {
+            if (data.success !== false) {
+                if (typeof $scope.dataEventFunctions.onAfterCreate === "function") {
+                    $scope.dataEventFunctions.onAfterCreate(data);
+                }
+                if (options.redirect) {
+                    window.location = options.redirect
+                } else {
+                    $location.path('/' + $scope.modelName + '/' + $scope.formPlusSlash + data._id + '/edit');
+                    //                    reset?
+                }
+            } else {
+
+                console.log(data);
+                showError(data);
+            }
+        }).error(handleError);
+    }
+
+    $scope.updateDocument = function(dataToSave, options) {
+        $http.post('api/' + $scope.modelName + '/' + $scope.id, dataToSave).success(function (data) {
+            if (data.success !== false) {
+                if (typeof $scope.dataEventFunctions.onAfterUpdate === "function") {
+                    $scope.dataEventFunctions.onAfterUpdate(data,master)
+                }
+                if (options.redirect) {
+                    window.location = options.redirect;
+                } else {
+                    master = angular.copy($scope.record);
+                    $scope.dismissError();
+//                  Alternatively we could copy data into master and update all look ups and then call cancel (which calls dismissError).
+//                  This is harder and I can't currently see the need.
+                }
+            } else {
+                showError(data);
+            }
+        }).error(handleError);
+
+    }
+
     $scope.save = function (options) {
         options = options || {};
 
         //Convert the lookup values into ids
         var dataToSave = convertToMongoModel($scope.formSchema, angular.copy($scope.record), 0);
-        if ($scope.record._id) {
-            $http.post('api/' + $scope.modelName + '/' + $scope.id, dataToSave).success(function (data) {
-                if (data.success !== false) {
-                    if (options.redirect) {
-                        window.location = options.redirect;
+        if ($scope.id) {
+            if (typeof $scope.dataEventFunctions.onBeforeUpdate === "function") {
+                $scope.dataEventFunctions.onBeforeUpdate(dataToSave, master, function(err) {
+                    if (err) {
+                        showError(err);
                     } else {
-                        master = data;
-                        $scope.cancel();
+                        $scope.updateDocument(dataToSave, options);
                     }
-                } else {
-                    showError(data);
-                }
-            }).error(handleError);
+                })
+            } else {
+                $scope.updateDocument(dataToSave, options);
+            }
         } else {
-            $http.post('api/' + $scope.modelName, dataToSave).success(function (data) {
-                if (data.success !== false) {
-                    if (options.redirect) {
-                        window.location = options.redirect
+            if (typeof $scope.dataEventFunctions.onBeforeCreate === "function") {
+                $scope.dataEventFunctions.onBeforeCreate(dataToSave, function(err) {
+                    if (err) {
+                        showError(err);
                     } else {
-                        $location.path('/' + $scope.modelName + '/' + data._id + '/edit');
-                        //                    reset?
+                        $scope.createNew(dataToSave, options);
                     }
-                } else {
-                    showError(data);
-                }
-            }).error(handleError)
+                })
+            } else {
+                $scope.createNew(dataToSave, options);
+            }
         }
     };
 
     $scope.new = function () {
+        $location.search("");
         $location.path('/' + $scope.modelName + '/' + $scope.formPlusSlash + 'new');
     };
+
+    $scope.deleteRecord = function(model, id) {
+        $http.delete('api/' + model + '/' + id).success(function() {
+            if (typeof $scope.dataEventFunctions.onAfterDelete === "function") {
+                $scope.dataEventFunctions.onAfterDelete(master);
+            }
+            $location.path('/' + $scope.modelName);
+        });
+    }
+
 
     $scope.delete = function() {
 
@@ -598,9 +679,26 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
             msgBox.open().then(function(result) {
 
                 if (result === 'yes') {
-                    $http.delete('api/' + $scope.modelName + '/' + $scope.id).success(function() {
-                        $location.path('/' + $scope.modelName);
-                    });
+
+                    if (typeof $scope.dataEventFunctions.onBeforeDelete === "function") {
+                            $scope.dataEventFunctions.onBeforeDelete(master, function(err) {
+
+                                if (err) {
+                                    showError(err);
+                                } else {
+
+                                    $scope.deleteRecord($scope.modelName, $scope.id);
+                                    
+                               }
+
+                            });
+                        } else {
+
+                            $scope.deleteRecord($scope.modelName, $scope.id);
+
+                        }
+
+                    
                 }
 
                 if (result === 'no') {
@@ -646,7 +744,6 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
             return false;
         }
     };
-
 
     $scope.disabledText = function (localStyling) {
         var text = "";
@@ -947,7 +1044,7 @@ formsAngular.controller('NavCtrl',['$scope', '$location', '$filter', '$locationP
             })
         }
         catch(error) {
-            if (error.message === "Argument '" + controllerName + "' is not a function, got undefined") {
+            if (/is not a function, got undefined/.test(error.message )) {
                 // No such controller - don't care
             } else {
                 console.log("Unable to instantiate "+controllerName + " - " + error.message);
@@ -1013,8 +1110,8 @@ formsAngular.controller('SearchCtrl', ['$scope', '$http', function ($scope, $htt
                 $scope.results = data.results;
                 $scope.moreCount = data.moreCount;
                 $scope.errorClass = $scope.results.length === 0 ? "error" : "";
-            }).error(function () {
-                console.log("Error in searchbox.js");
+            }).error(function (data, status) {
+                console.log("Error in searchbox.js : " + data + ' (status=' + status + ')');
             });
         } else {
             $scope.errorClass = "";
@@ -1285,8 +1382,8 @@ formsAngular
                                 }
 
                                 template += '<div class="schema-head well">' + info.label + '</div>' +
-                                    '<div class="sub-doc well" id="' + info.id + 'List" ng-subdoc-repeat="subDoc in record.' + info.name + '">' +
-// TODO When upgrade to 1.14 works OK    '<div class="sub-doc well" id="' + info.id + 'List" ng-repeat="subDoc in record.' + info.name + ' track by $index">' +
+// for angular 1.0 branch     '<div class="sub-doc well" id="' + info.id + 'List" ng-subdoc-repeat="subDoc in record.' + info.name + '">' +
+                                '<div class="sub-doc well" id="' + info.id + 'List" ng-repeat="subDoc in record.' + info.name + ' track by $index">' +
                                     '<div class="row-fluid">' +
                                     '<div class="pull-left">' +
                                     '<form-input ng-repeat="' + schemaLoop + '" info="{{field}}" schema="true"></form-input>' +
@@ -1374,115 +1471,116 @@ formsAngular
     }]);
 
 
-formsAngular
-// Directive to handle subdocs.  Mostly a copy of ng-repeat, but needed to simplify it a bit to make it work
-    .directive('ngSubdocRepeat', [function () {
-        return {
-            transclude: 'element',
-            priority: 1000,
-            terminal: true,
-            compile: function (element, attr, linker) {
-                return function (scope, iterStartElement, attr) {
-                    var expression = attr.ngSubdocRepeat;
-                    var match = expression.match(/^\s*(.+)\s+in\s+(.*)\s*$/),
-                        lhs, rhs, valueIdent, keyIdent;
-                    if (!match) {
-                        throw Error("Expected ngSubdocRepeat in form of '_item_ in _collection_' but got '" +
-                            expression + "'.");
-                    }
-                    lhs = match[1];
-                    rhs = match[2];
-                    match = lhs.match(/^(?:([\$\w]+)|\(([\$\w]+)\s*,\s*([\$\w]+)\))$/);
-                    if (!match) {
-                        throw Error("'item' in 'item in collection' should be identifier or (key, value) but got '" +
-                            lhs + "'.");
-                    }
-                    valueIdent = match[3] || match[1];
-                    keyIdent = match[2];
-
-                    // Store a list of elements from previous run - an array of objects with following properties:
-                    //   - scope: bound scope
-                    //   - element: previous element.
-                    var lastOrderArr = [];
-
-                    scope.$watch(function ngSubdocRepeatWatch(scope) {
-                        var index, length,
-                            collection = scope.$eval(rhs),
-                            cursor = iterStartElement,     // current position of the node
-                        // Same as lastOrder but it has the current state. It will become the
-                        // lastOrder on the next iteration.
-                            nextOrderArr = [],
-                            arrayLength,
-                            childScope,
-                            key, value, // key/value of iteration
-                            array,
-                            last;       // last object information {scope, element, index}
-                        if (!angular.isArray(collection)) {
-                            // if object, extract keys, sort them and use to determine order of iteration over obj props
-                            array = [];
-                            for (key in collection) {
-                                if (collection.hasOwnProperty(key) && key.charAt(0) != '$') {
-                                    array.push(key);
-                                }
-                            }
-                            array.sort();
-                        } else {
-                            array = collection || [];
-                        }
-
-                        arrayLength = array.length;
-
-                        // we are not using forEach for perf reasons (trying to avoid #call)
-                        for (index = 0, length = array.length; index < length; index++) {
-                            key = (collection === array) ? index : array[index];
-                            value = collection[key];
-
-                            last = lastOrderArr.shift();
-
-                            if (last) {
-                                // if we have already seen this object, then we need to reuse the
-                                // associated scope/element
-                                childScope = last.scope;
-                                nextOrderArr.push(last);
-                                cursor = last.element;
-                            } else {
-                                // new item which we don't know about
-                                childScope = scope.$new();
-                            }
-
-                            childScope[valueIdent] = value;
-                            if (keyIdent) childScope[keyIdent] = key;
-                            childScope.$index = index;
-                            childScope.$first = (index === 0);
-                            childScope.$last = (index === (arrayLength - 1));
-                            childScope.$middle = !(childScope.$first || childScope.$last);
-
-                            if (!last) {
-                                linker(childScope, function (clone) {
-                                    cursor.after(clone);
-                                    last = {
-                                        scope: childScope,
-                                        element: (cursor = clone),
-                                        index: index
-                                    };
-                                    nextOrderArr.push(last);
-                                });
-                            }
-                        }
-
-                        //shrink children
-                        for (var j = 0; j < lastOrderArr.length ; j++) {
-                            lastOrderArr[j].element.remove();
-                            lastOrderArr[j].scope.$destroy();
-                        }
-
-                        lastOrderArr = nextOrderArr;
-                    });
-                };
-            }
-        }
-    }]);
-
+// No longer need as ng-repeat improved in angular 1.2
+//formsAngular
+//// Directive to handle subdocs.  Mostly a copy of ng-repeat, but needed to simplify it a bit to make it work
+//    .directive('ngSubdocRepeat', [function () {
+//        return {
+//            transclude: 'element',
+//            priority: 1000,
+//            terminal: true,
+//            compile: function (element, attr, linker) {
+//                return function (scope, iterStartElement, attr) {
+//                    var expression = attr.ngSubdocRepeat;
+//                    var match = expression.match(/^\s*(.+)\s+in\s+(.*)\s*$/),
+//                        lhs, rhs, valueIdent, keyIdent;
+//                    if (!match) {
+//                        throw Error("Expected ngSubdocRepeat in form of '_item_ in _collection_' but got '" +
+//                            expression + "'.");
+//                    }
+//                    lhs = match[1];
+//                    rhs = match[2];
+//                    match = lhs.match(/^(?:([\$\w]+)|\(([\$\w]+)\s*,\s*([\$\w]+)\))$/);
+//                    if (!match) {
+//                        throw Error("'item' in 'item in collection' should be identifier or (key, value) but got '" +
+//                            lhs + "'.");
+//                    }
+//                    valueIdent = match[3] || match[1];
+//                    keyIdent = match[2];
+//
+//                    // Store a list of elements from previous run - an array of objects with following properties:
+//                    //   - scope: bound scope
+//                    //   - element: previous element.
+//                    var lastOrderArr = [];
+//
+//                    scope.$watch(function ngSubdocRepeatWatch(scope) {
+//                        var index, length,
+//                            collection = scope.$eval(rhs),
+//                            cursor = iterStartElement,     // current position of the node
+//                        // Same as lastOrder but it has the current state. It will become the
+//                        // lastOrder on the next iteration.
+//                            nextOrderArr = [],
+//                            arrayLength,
+//                            childScope,
+//                            key, value, // key/value of iteration
+//                            array,
+//                            last;       // last object information {scope, element, index}
+//                        if (!angular.isArray(collection)) {
+//                            // if object, extract keys, sort them and use to determine order of iteration over obj props
+//                            array = [];
+//                            for (key in collection) {
+//                                if (collection.hasOwnProperty(key) && key.charAt(0) != '$') {
+//                                    array.push(key);
+//                                }
+//                            }
+//                            array.sort();
+//                        } else {
+//                            array = collection || [];
+//                        }
+//
+//                        arrayLength = array.length;
+//
+//                        // we are not using forEach for perf reasons (trying to avoid #call)
+//                        for (index = 0, length = array.length; index < length; index++) {
+//                            key = (collection === array) ? index : array[index];
+//                            value = collection[key];
+//
+//                            last = lastOrderArr.shift();
+//
+//                            if (last) {
+//                                // if we have already seen this object, then we need to reuse the
+//                                // associated scope/element
+//                                childScope = last.scope;
+//                                nextOrderArr.push(last);
+//                                cursor = last.element;
+//                            } else {
+//                                // new item which we don't know about
+//                                childScope = scope.$new();
+//                            }
+//
+//                            childScope[valueIdent] = value;
+//                            if (keyIdent) childScope[keyIdent] = key;
+//                            childScope.$index = index;
+//                            childScope.$first = (index === 0);
+//                            childScope.$last = (index === (arrayLength - 1));
+//                            childScope.$middle = !(childScope.$first || childScope.$last);
+//
+//                            if (!last) {
+//                                linker(childScope, function (clone) {
+//                                    cursor.after(clone);
+//                                    last = {
+//                                        scope: childScope,
+//                                        element: (cursor = clone),
+//                                        index: index
+//                                    };
+//                                    nextOrderArr.push(last);
+//                                });
+//                            }
+//                        }
+//
+//                        //shrink children
+//                        for (var j = 0; j < lastOrderArr.length ; j++) {
+//                            lastOrderArr[j].element.remove();
+//                            lastOrderArr[j].scope.$destroy();
+//                        }
+//
+//                        lastOrderArr = nextOrderArr;
+//                    });
+//                };
+//            }
+//        }
+//    }]);
+//
 
 formsAngular.filter('titleCase',[function() {
     return function(str, stripSpaces) {
@@ -1501,7 +1599,8 @@ formsAngular.factory('$data', [function() {
 
     var sharedData = {
         record: {},
-        disableFunctions: {}
+        disableFunctions: {},
+        dataEventFunctions: {}
     };
     return sharedData;
 
