@@ -1,4 +1,4 @@
-/*! forms-angular 2013-11-16 */
+/*! forms-angular 2013-11-17 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
@@ -1275,6 +1275,11 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
                         }
                         option = option.trim();
                         var pos = _.sortedIndex(optionsList, option);
+                        // handle dupes (ideally people will use unique indexes to stop them but...)
+                        if (optionsList[pos] === option) {
+                            option = option + '    (' + data[i]._id + ')'
+                            var pos = _.sortedIndex(optionsList, option);
+                        }
                         optionsList.splice(pos, 0, option);
                         idList.splice(pos, 0, data[i]._id);
                     }
