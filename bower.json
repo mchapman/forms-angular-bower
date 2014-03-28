@@ -1,6 +1,6 @@
 {
   "name": "forms-angular",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "homepage": "https://github.com/mchapman/forms-angular",
   "description": "No nonsense forms for the MEAN stack",
   "keywords": [
@@ -38,6 +38,6 @@
     "angular-elastic": "~2",
     "select2-bootstrap-css": "~1.2",
     "jspdf": "*",
-    "ng-ckeditor": "git://github.com/mchapman/ng-ckeditor#selective-update"
+    "ng-ckeditor": "*"
   }
 }
