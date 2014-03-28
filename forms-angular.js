@@ -1,4 +1,4 @@
-/*! forms-angular 2014-03-27 */
+/*! forms-angular 2014-03-28 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
@@ -10,6 +10,7 @@ var formsAngular = angular.module('formsAngular', [
     , 'ngGrid'
     , 'infinite-scroll'
     , 'monospaced.elastic'
+    , 'ngCkeditor'
 ]);
 
 // Ideally would want a config call in here which adds the routes, below, but couldn't get it to work
@@ -409,7 +410,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
                                 initSelection: function (element, callback) {
                                     var theId = element.val();
                                     if (theId && theId !== '') {
-                                        $http.get('api/' + mongooseOptions.ref + '/' + theId + '/list').success(function (data) {
+                                        $http.get('/api/' + mongooseOptions.ref + '/' + theId + '/list').success(function (data) {
                                             if (data.success === false) {
                                                 $location.path("/404");
                                             }
@@ -821,7 +822,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
     };
 
     $scope.readRecord = function () {
-        $http.get('api/' + $scope.modelName + '/' + $scope.id).success(function (data) {
+        $http.get('/api/' + $scope.modelName + '/' + $scope.id).success(function (data) {
             if (data.success === false) {
                 $location.path("/404");
             }
@@ -853,7 +854,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
     }
 
     $scope.scrollTheList = function () {
-        $http.get('api/' + $scope.modelName + generateListQuery()).success(function (data) {
+        $http.get('/api/' + $scope.modelName + generateListQuery()).success(function (data) {
             if (angular.isArray(data)) {
                 $scope.recordList = $scope.recordList.concat(data);
             } else {
@@ -864,7 +865,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
             });
     };
 
-    $http.get('api/schema/' + $scope.modelName + ($scope.formName ? '/' + $scope.formName : ''), {cache: true}).success(function (data) {
+    $http.get('/api/schema/' + $scope.modelName + ($scope.formName ? '/' + $scope.formName : ''), {cache: true}).success(function (data) {
 
         handleSchema('Main ' + $scope.modelName, data, $scope.formSchema, $scope.listSchema, '', true);
 
@@ -968,7 +969,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
     };
 
     $scope.createNew = function (dataToSave, options) {
-        $http.post('api/' + $scope.modelName, dataToSave).success(function (data) {
+        $http.post('/api/' + $scope.modelName, dataToSave).success(function (data) {
             if (data.success !== false) {
                 if (typeof $scope.dataEventFunctions.onAfterCreate === "function") {
                     $scope.dataEventFunctions.onAfterCreate(data);
@@ -987,7 +988,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
 
     $scope.updateDocument = function (dataToSave, options) {
         $scope.phase = 'updating';
-        $http.post('api/' + $scope.modelName + '/' + $scope.id, dataToSave).success(function (data) {
+        $http.post('/api/' + $scope.modelName + '/' + $scope.id, dataToSave).success(function (data) {
             if (data.success !== false) {
                 if (typeof $scope.dataEventFunctions.onAfterUpdate === "function") {
                     $scope.dataEventFunctions.onAfterUpdate(data, master)
@@ -1046,7 +1047,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
     };
 
     $scope.deleteRecord = function (model, id) {
-        $http.delete('api/' + model + '/' + id).success(function () {
+        $http.delete('/api/' + model + '/' + id).success(function () {
             if (typeof $scope.dataEventFunctions.onAfterDelete === "function") {
                 $scope.dataEventFunctions.onAfterDelete(master);
             }
@@ -1396,10 +1397,10 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
     var setUpSelectOptions = function (lookupCollection, schemaElement) {
         var optionsList = $scope[schemaElement.options] = [];
         var idList = $scope[schemaElement.ids] = [];
-        $http.get('api/schema/' + lookupCollection, {cache: true}).success(function (data) {
+        $http.get('/api/schema/' + lookupCollection, {cache: true}).success(function (data) {
             var listInstructions = [];
             handleSchema('Lookup ' + lookupCollection, data, null, listInstructions, '', false);
-            $http.get('api/' + lookupCollection, {cache: true}).success(function (data) {
+            $http.get('/api/' + lookupCollection, {cache: true}).success(function (data) {
                 if (data) {
                     for (var i = 0; i < data.length; i++) {
                         var option = '';
@@ -1464,7 +1465,7 @@ formsAngular.controller('BaseCtrl', ['$scope', '$routeParams', '$location', '$ht
 formsAngular.controller('ModelCtrl', [ '$scope', '$http', '$location', function ($scope, $http, $location) {
 
     $scope.models = [];
-    $http.get('api/models').success(function (data) {
+    $http.get('/api/models').success(function (data) {
         $scope.models = data;
     }).error(function () {
             $location.path("/404");
@@ -1593,40 +1594,6 @@ formsAngular.controller('NavCtrl', ['$scope', '$data', '$location', '$filter', '
     };
 
 }]);
-
-formsAngular.directive('ckeditor', function() {
-    return {
-        require: '?ngModel',
-        link: function(scope, elm, attr, ngModel) {
-            var options={disableNativeSpellChecker : false};
-            options = angular.extend(options, scope[attr.ckeditor]);
-            var ck = CKEDITOR.replace(elm[0], options);
-
-            if (!ngModel) return;
-
-            ck.on('instanceReady', function() {
-                ck.setData(ngModel.$viewValue);
-            });
-
-            function updateModel() {
-                scope.$apply(function() {
-                    var value = ck.getData();
-                    if ((ngModel.$viewValue || '') !== value) {
-                        ngModel.$setViewValue(value);
-                    }
-                });
-            }
-
-            ck.on('change', updateModel);
-            ck.on('key', updateModel);
-            ck.on('dataReady', updateModel);
-
-            ngModel.$render = function(value) {
-                ck.setData(ngModel.$viewValue);
-            };
-        }
-    };
-});
 
 formsAngular
     .directive('formButtons', ['$compile', function ($compile) {
@@ -2322,7 +2289,7 @@ formsAngular.controller('SearchCtrl', ['$scope', '$http', '$location', function 
     $scope.$watch('searchTarget', function(newValue) {
         if (newValue && newValue.length > 0) {
             currentRequest = newValue;
-            $http.get('api/search?q=' + newValue).success(function (data) {
+            $http.get('/api/search?q=' + newValue).success(function (data) {
                 // Check that we haven't fired off a subsequent request, in which
                 // case we are no longer interested in these results
                 if (currentRequest === newValue) {
