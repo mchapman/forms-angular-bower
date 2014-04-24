@@ -1,6 +1,6 @@
 {
   "name": "forms-angular",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "homepage": "https://github.com/mchapman/forms-angular",
   "description": "No nonsense forms for the MEAN stack",
   "keywords": [
@@ -25,7 +25,6 @@
     "angular-ui-bootstrap-bower": "0.8.0",
     "angular-sanitize": "1.2",
     "angular-ui-select2": "0.0.4",
-    "ckeditor": "4",
     "bootstrap": "2.3.2",
     "html5shiv-dist": "3.6.2",
     "jquery": "1.10",
@@ -34,7 +33,7 @@
     "underscore": "1.6",
     "angular-ui-date": "git://github.com/mchapman/ui-date#patch-1",
     "ngInfiniteScroll": "~1.0.0",
-    "ng-grid": "~2.0.7",
+    "ng-grid": "2.0.7",
     "angular-elastic": "~2",
     "select2-bootstrap-css": "~1.2",
     "jspdf": "*",
