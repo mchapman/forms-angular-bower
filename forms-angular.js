@@ -16,7 +16,7 @@ var formsAngular = angular.module('formsAngular', [
 void(formsAngular);  // Make jshint happy
 'use strict';
 
-formsAngular.controller('AnalysisCtrl', ['$locationParse', '$filter', '$scope', '$http', '$location', '$routeParams', function ($locationParse, $filter, $scope, $http, $location, $routeParams) {
+formsAngular.controller('AnalysisCtrl', ['$locationParse', '$filter', '$scope', '$http', '$location', '$routeParams', 'urlService', function ($locationParse, $filter, $scope, $http, $location, $routeParams, urlService) {
   /*jshint newcap: false */
   var firstTime = true,
     pdfPlugIn = new ngGridPdfExportPlugin({inhibitButton: true}),
@@ -42,11 +42,11 @@ formsAngular.controller('AnalysisCtrl', ['$locationParse', '$filter', '$scope', 
     afterSelectionChange: function (rowItem) {
       var url = $scope.reportSchema.drilldown;
       if (url) {
-        url = url.replace(/\|.+?\|/g, function (match) {
+        url = urlService.buildUrl(url.replace(/\|.+?\|/g, function (match) {
           var param = match.slice(1, -1),
             isParamTest = /\((.+)\)/.exec(param);
           return isParamTest ? $scope.reportSchema.params[isParamTest[1]].value : rowItem.entity[param];
-        });
+        }));
         window.location = url;
       }
     },
