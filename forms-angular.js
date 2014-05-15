@@ -16,7 +16,8 @@ var formsAngular = angular.module('formsAngular', [
 void(formsAngular);  // Make jshint happy
 'use strict';
 
-formsAngular.controller('AnalysisCtrl', ['$locationParse', '$filter', '$scope', '$http', '$location', '$routeParams', 'urlService', function ($locationParse, $filter, $scope, $http, $location, $routeParams, urlService) {
+formsAngular.controller('AnalysisCtrl', ['$locationParse', '$filter', '$scope', '$http', '$location', '$routeParams', 'urlService',
+  function ($locationParse, $filter, $scope, $http, $location, $routeParams, urlService) {
   /*jshint newcap: false */
   var firstTime = true,
     pdfPlugIn = new ngGridPdfExportPlugin({inhibitButton: true}),
