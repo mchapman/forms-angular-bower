@@ -1,4 +1,4 @@
-/*! forms-angular 2014-05-15 */
+/*! forms-angular 2014-05-16 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
