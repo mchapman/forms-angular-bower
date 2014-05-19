@@ -1,4 +1,4 @@
-/*! forms-angular 2014-05-16 */
+/*! forms-angular 2014-05-19 */
 'use strict';
 
 var formsAngular = angular.module('formsAngular', [
@@ -1835,6 +1835,7 @@ formsAngular
                 });
               } else {
                 var tagType = separateLines ? 'div' : 'span';
+                common = common.replace('$index', '$parent.$index').replace('name="', 'name="{{$parent.$index}}-');
                 value += '<' + tagType + ' ng-repeat="option in ' + fieldInfo.options + '"><input ' + common + ' type="radio" value="{{option}}"> {{option}} </' + tagType + '> ';
               }
               break;
@@ -1960,11 +1961,13 @@ formsAngular
 
         var generateLabel = function (fieldInfo, addButtonMarkup, options) {
           var labelHTML = '';
-          if ((options.formstyle !== 'inline' && (fieldInfo.label !== '' || cssFrameworkService.framework() === 'bs3')) || addButtonMarkup) {
+          if ((cssFrameworkService.framework() === 'bs3' || (options.formstyle !== 'inline' && fieldInfo.label !== '')) || addButtonMarkup) {
             labelHTML = '<label';
             if (isHorizontalStyle(options.formstyle)) {
               labelHTML += ' for="' + fieldInfo.id + '"';
               if (cssFrameworkService.framework() === 'bs3') { labelHTML += addAll('Label', 'col-sm-2', options); }
+            } else if (options.formstyle === 'inline') {
+              labelHTML += ' for="' + fieldInfo.id + '" class="sr-only"';
             }
             labelHTML += addAll('Label', 'control-label', options);
             labelHTML += '>' + fieldInfo.label + (addButtonMarkup || '') + '</label>';
@@ -2485,7 +2488,7 @@ formsAngular.provider('cssFrameworkService', [function () {
   //      bs2 = Twitter Bootstrap 2.3.2 (default)
   //      bs3 = Bootstrap 3.1.1
   var config = {
-    framework: 'bs2'
+    framework: 'bs2'  // Unit tests depend on this being bs2
   };
 
   return {
