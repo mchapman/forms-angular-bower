@@ -1811,12 +1811,10 @@ formsAngular
                   value += '<option></option>';
                 }
                 if (angular.isArray(fieldInfo.options)) {
-                  if (options.subschema) { common = common.replace('name="', 'name="{{$index}}-'); }
                   angular.forEach(fieldInfo.options, function (optValue) {
                     value += '<option>' + optValue + '</option>';
                   });
                 } else {
-                  if (options.subschema) { common = common.replace('$index', '$parent.$index').replace('name="', 'name="{{$parent.$index}}-'); }
                   value += '<option ng-repeat="option in ' + fieldInfo.options + '">{{option}}</option>';
                 }
                 value += '</select>';
@@ -1830,6 +1828,7 @@ formsAngular
               var separateLines = (options.formstyle !== 'inline' && !fieldInfo.inlineRadio);
 
               if (angular.isArray(fieldInfo.options)) {
+                if (options.subschema) { common = common.replace('name="', 'name="{{$index}}-'); }
                 angular.forEach(fieldInfo.options, function (optValue) {
                   value += '<input ' + common + 'type="radio"';
                   value += ' value="' + optValue + '">' + optValue;
@@ -1837,7 +1836,7 @@ formsAngular
                 });
               } else {
                 var tagType = separateLines ? 'div' : 'span';
-                common = common.replace('$index', '$parent.$index').replace('name="', 'name="{{$parent.$index}}-');
+                if (options.subschema) { common = common.replace('$index', '$parent.$index').replace('name="', 'name="{{$parent.$index}}-'); }
                 value += '<' + tagType + ' ng-repeat="option in ' + fieldInfo.options + '"><input ' + common + ' type="radio" value="{{option}}"> {{option}} </' + tagType + '> ';
               }
               break;
